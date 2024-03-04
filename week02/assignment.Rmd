@@ -1,0 +1,89 @@
+---
+title: "assignment2"
+author: "Zhihan Zhu"
+date: "`r Sys.Date()`"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+## Find and download annotations data
+
+```{r}
+suppressPackageStartupMessages({
+  library(AnnotationHub) # to fetch genomes, annotations, etc.
+  library(ensembldb)     # to manipulate ensembl gene annotations
+  library(GenomicRanges) # data structure for genomic ranges 
+  library(epiwraps)      # visualization
+})
+```
+
+```{r}
+ah <- AnnotationHub()
+q <- query(ah, c("Mus Musculus", "ensembl", "102", "GRCm38"))
+q
+```
+
+```{r}
+# The mouse (Mus Musculus) EnsDb object, version 102, genome build GRCm38
+ensdb <- ah[["AH89211"]]
+
+# The mouse genome sequence (dna_sm) in TwoBit/2bit format for GRCm38
+mouse_dna_sm <- ah[["AH88477"]]
+```
+
+```{r}
+q <- query(ah, c("Drosophila", "ensembl", "dna_sm", "BDGP6", "2bit"))
+q
+```
+
+```{r}
+# The drosophila melanogaster genome sequence ( dna_sm ) in TwoBit/2bit format for BDGP6
+drosophila_dna_sm <- ah[["AH106160"]]
+```
+
+## Find the following, using mouse EnsDb
+
+```{r}
+# How many different ensembl gene IDs and gene symbols are there for protein-coding genes?
+
+protein_coding_genes <- genes(ensdb, filter = ~ gene_biotype == "protein_coding")
+protein_coding_genes
+
+# How many different ensembl gene IDs and gene symbols are there for protein-coding genes?
+
+# gene IDs
+gene_ids <- length(unique(protein_coding_genes$gene_id))
+gene_ids
+
+# gene symbols
+gene_symbols <- length(unique(protein_coding_genes$gene_name))
+gene_symbols
+```
+
+```{r}
+# Plot the distribution of the spliced length of protein-coding transcripts
+
+exsPerTx <- exonsBy(ensdb, column=c("tx_id","tx_biotype"), 
+                    filter=TxBiotypeFilter("protein_coding"))
+exsPerTx
+```
+
+```{r}
+library(ggplot2)
+spliced_lengths <- sapply(exsPerTx, function(exon) sum(width(exon)))
+head(spliced_lengths)
+```
+
+```{r}
+ggplot(data.frame(Length = spliced_lengths), aes(x = Length)) +
+  geom_histogram() +
+  theme_minimal() +
+  labs(title = "Distribution of the Length of Protein-coding Transcripts",
+       x = "Spliced Length", y = "Frequency") +
+  xlim(c(0, 20000))
+# Limiting x axis to get a visually good plot
+```
+
