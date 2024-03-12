@@ -1,5 +1,5 @@
 ---
-title: "w3 practical"
+title: "W3 practical: example ChIPseq"
 output: html_document
 date: "2024-03-07"
 ---
@@ -7,18 +7,18 @@ date: "2024-03-07"
 
 ```{r}
 suppressPackageStartupMessages({
-  library(AnnotationHub) # to retrieved to genomes / annotations
-  library(Rsubread) # alignment
-  library(rtracklayer) # to import/export files
-  library(Biostrings) # handle sequences (DNA/protein/RNA)
-  library(Rfastp) # read adapter trimming, QC of reads
-  library(epiwraps) # visualization
+  library(AnnotationHub)
+  library(Rsubread)
+  library(rtracklayer)
+  library(Biostrings)
+  library(Rfastp)
+  library(epiwraps)
 })
 ah <- AnnotationHub()
 # if on renku, use ah <- AnnotationHub(cache="ahcache")
 ```
 
-We will perform the primary analysis of an example dataset, at each step demonstrating the use of both a very standard pipeline, and a full R-based equivalent. Pay attention to which chunks are R or bash code (see header)
+We will perform the primary analysis of an example dataset, at each step demonstrating **both the use of both a very standard pipeline, and a full R-based equivalent**. Pay attention to which chunks are R or bash code (see header)
 
 # Downloading the raw reads
 
@@ -30,9 +30,9 @@ We download the data from ENCODE:
 
 ```{r, eval=FALSE}
 options(timeout=3600) # we need to increase the download timeout since the file is large and cnx slow
-#dir.create("raw")
-download.file("https://www.encodeproject.org/files/ENCFF014MOQ/@@download/ENCFF014MOQ.fastq.gz", dest="D:/ETH/FS2024/Epigen/data/week3/Myc.fastq.gz", mode = "wb")
-download.file("https://www.encodeproject.org/files/ENCFF179TMO/@@download/ENCFF179TMO.fastq.gz", dest="D:/ETH/FS2024/Epigen/data/week3/input.fastq.gz", mode="wb")
+dir.create("raw")
+download.file("https://www.encodeproject.org/files/ENCFF014MOQ/@@download/ENCFF014MOQ.fastq.gz", dest="D:/ETH/FS2024/Epigen/ethEpigen2024_materials/week03/Myc.fastq.gz", mode = "wb")
+download.file("https://www.encodeproject.org/files/ENCFF179TMO/@@download/ENCFF179TMO.fastq.gz", dest="D:/ETH/FS2024/Epigen/ethEpigen2024_materials/week03/input.fastq.gz", mode="wb")
 ```
 
 
@@ -45,7 +45,7 @@ For this we will use shell commands:
 ```{bash engine.opts='-l', eval=FALSE}
 # note that depending on how your computer/server is set up, you might need to 
 # specify where to find the software, e.g.:
-export PATH="/opt/miniconda3/bin:$PATH"
+# export PATH="/opt/miniconda3/bin:$PATH"
 mkdir -p raw_fastqc
 fastqc -o raw_fastqc --threads 4 raw/*.fastq.gz
 ```
@@ -53,7 +53,6 @@ fastqc -o raw_fastqc --threads 4 raw/*.fastq.gz
 This will create an html report with QC plots for each file. We could optionally aggregate those using multiQC:
 
 ```{bash engine.opts='-l', eval=FALSE}
-export PATH="/opt/miniconda3/bin:$PATH"
 multiqc -o raw_fastqc raw_fastqc
 ```
 
@@ -61,30 +60,22 @@ multiqc -o raw_fastqc raw_fastqc
 ### Trimming
 
 ```{bash, eval=FALSE}
-export PATH="/opt/miniconda3/bin:$PATH"
-
 mkdir -p trimmed
 # this would be for a single sample:
 trimmomatic SE -threads 4 -summary trimmed/Myc.stats -phred33 raw/Myc.fastq.gz trimmed/Myc.fastq.gz \
 ILLUMINACLIP:TruSeq3-SE:2:15:4:4:true LEADING:20 TRAILING:20 SLIDINGWINDOW:4:15 MINLEN:25
-
+# we do the same for the input:
 trimmomatic SE -threads 4 -summary trimmed/input.stats -phred33 raw/input.fastq.gz trimmed/input.fastq.gz ILLUMINACLIP:TruSeq3-SE:2:15:4:4:true LEADING:20 TRAILING:20 SLIDINGWINDOW:4:15 MINLEN:25
 ```
 
 ## Using R and Rfastp
 
 ```{r}
-dir.create("D:/ETH/FS2024/Epigen/data/week3/rfastp.trimmed")
-
-fastq_files <- c(Myc="D:/ETH/FS2024/Epigen/data/week3/Myc.fastq.gz", input="D:/ETH/FS2024/Epigen/data/week3/input.fastq.gz")
-
-output_fastq_files <- c(Myc = "D:/ETH/FS2024/Epigen/data/week3/rfastp.trimmed/Myc.fastq.gz",
-                        input = "D:/ETH/FS2024/Epigen/data/week3/rfastp.trimmed/input.fastq.gz")
-
-qx <- c(Rfastp::rfastp(fastq_files["Myc"], thread = 4, overrepresentationAnalysis = TRUE,
-                       outputFastq = output_fastq_files["Myc"]),
-        Rfastp::rfastp(fastq_files["input"], thread = 4, overrepresentationAnalysis = TRUE,
-                       outputFastq = output_fastq_files["input"]))
+dir.create("rfastp.trimmed")
+qc <- lapply(c(Myc="Myc.fastq.gz", input="input.fastq.gz"), FUN=function(x){
+  Rfastp::rfastp(x, thread=4, overrepresentationAnalysis=TRUE,
+                 outputFastq=file.path("rfastp.trimmed/",gsub("\\.fastq\\.gz$","",basename(x))))
+})
 ```
 
 This will create an html report with before/after QC plots, as well as a trimmed
@@ -93,7 +84,7 @@ stats also saved by the program) can be used to generate the QC plots inside a
 markdown, for example:
 
 ```{r}
-Rfastp::curvePlot(qx$Myc, curve="content_curves")
+Rfastp::curvePlot(qc$Myc, curve="content_curves")
 ```
 
 
@@ -119,10 +110,6 @@ Rsubread::buildindex("BDGP6_genome/rsubread", reference="BDGP6_genome/genome.fas
 ### Alignment
 
 ```{r}
-# to know how many CPUs are available:
-parallel::detectCores()
-
-
 dir.create("aligned")
 align.stats <- Rsubread::align(index="BDGP6_genome/rsubread", type="dna",
                                readfile1=c("rfastp.trimmed/Myc_R1.fastq.gz", 
@@ -130,7 +117,6 @@ align.stats <- Rsubread::align(index="BDGP6_genome/rsubread", type="dna",
                                output_file=c("aligned/Myc.bam","aligned/input.bam"),
                                nthreads=6, sortReadsByCoordinates=TRUE)
 align.stats
-
 ```
 
 
@@ -162,7 +148,6 @@ samtools index aligned/input.bam
 ## Using MACS2
 
 ```{bash engine.opts='-l'}
-export PATH="/opt/miniconda3/bin:$PATH"
 mkdir -p peaks
 macs3 callpeak --outdir peaks -n Myc --gsize dm -t aligned/Myc.bam -c aligned/input.bam
 # macs2 works in the same way
@@ -186,13 +171,14 @@ peaks <- callPeaks("aligned/Myc.bam", fragLength=50L)
 rtracklayer::export.bed(peaks, "peaks/peaks.bed")
 ```
 
-## Having a look at a peak
+## Having a loog at a peak
 
 Now it turns out that this is a particularly bad datasets, and many peaks (no matter the caller used) aren't very convincing when we compare to the input signal, for example:
 
 ```{r}
-peaks[1]
-plotSignalTracks(files = c(Myc="aligned/Myc.bam", Input="aligned/input.bam"), region=peaks[1], extend=1000)
+head(peaks)
+plotSignalTracks(c(Myc="aligned/Myc.bam", Input="aligned/input.bam"), region=peaks[1],
+                 extend=1000)
 ```
 
 Here's instead a good example:

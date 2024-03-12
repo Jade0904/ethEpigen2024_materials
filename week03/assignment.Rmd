@@ -1,0 +1,129 @@
+---
+title: "assignment3"
+author: "Zhihan Zhu"
+date: "`r Sys.Date()`"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+```{r}
+suppressPackageStartupMessages({
+  library(GenomicRanges)
+  library(GenomicFeatures)
+  library(AnnotationHub) # to retrieved to genomes / annotations
+  library(Rsubread) # alignment
+  library(rtracklayer) # to import/export files
+  library(Biostrings) # handle sequences (DNA/protein/RNA)
+  library(Rfastp) # read adapter trimming, QC of reads
+  library(epiwraps) # visualization
+})
+ah <- AnnotationHub()
+```
+
+## Process from the raw data
+
+```{r}
+# download Drosophila ChIP-seq for the protein CTCF
+options(timeout=3600)
+data <- "D:/ETH/FS2024/Epigen/data/week3/ENCFF127RRR.fastq.gz"
+download.file("https://www.encodeproject.org/files/ENCFF127RRR/@@download/ENCFF127RRR.fastq.gz", dest=data, mode = "wb")
+```
+
+```{r}
+# Reads QC and trimming
+output_path <- "D:/ETH/FS2024/Epigen/data/week3/"
+qc <- Rfastp::rfastp(data, thread=4, overrepresentationAnalysis=TRUE,
+                     outputFastq=paste0(output_path, "ENCFF127RRR"))
+```
+
+```{r}
+# generate QC plots
+Rfastp::curvePlot(qc, curve="content_curves")
+```
+
+```{r}
+# build a genome index for mapping
+q <- query(ah, c("Drosophila", "ensembl", "dna_sm", "BDGP6", "2bit"))
+q
+```
+
+```{r}
+genome <- ah[["AH49674"]] # genome sequence
+# write the genome in the fasta format
+genome_path <- paste0(output_path, "BDGP6_genome/genome.fasta.gz")
+rsubread_path <- paste0(output_path, "BDGP6_genome/rsubread")
+export(import.2bit(genome), genome_path, compress=TRUE)
+# we build a Rsubread index
+Rsubread::buildindex(rsubread_path, reference=genome_path)
+```
+```{r}
+# alignment
+align.stats <- Rsubread::align(index=rsubread_path, type="dna",
+                               readfile1="D:/ETH/FS2024/Epigen/data/week3/ENCFF127RRR_R1.fastq.gz",
+                               output_file="D:/ETH/FS2024/Epigen/data/week3/ENCFF127RRR.bam",
+                               nthreads=6, sortReadsByCoordinates=TRUE)
+align.stats
+```
+
+```{r}
+# peak calling using R
+peaks <- callPeaks("D:/ETH/FS2024/Epigen/data/week3/ENCFF127RRR.bam", fragLength=36L)
+# if we want to save it as a bed file:
+rtracklayer::export.bed(peaks, "D:/ETH/FS2024/Epigen/data/week3/peaks/peaks.bed")
+```
+
+```{r}
+# import peaks if needed
+peaks <- rtracklayer::import.bed("D:/ETH/FS2024/Epigen/data/week3/peaks/peaks.bed")
+```
+
+
+```{r}
+plotSignalTracks(files = "D:/ETH/FS2024/Epigen/data/week3/ENCFF127RRR.bam", region=peaks[1], extend=1000)
+```
+
+## Report
+
+### How many reads and what percentage were mapped?
+
+```{r}
+# from previous output
+print("Mapped : 3504769 (91.8%)")
+```
+
+### How many peaks were found?
+
+```{r}
+print(length(peaks))
+```
+
+### Plot a peak inside a gene
+
+```{r}
+# find gene annotation
+q <- query(ah, c("Drosophila", "ensembl", "BDGP6", "gtf"))
+q
+```
+
+```{r}
+annotation <- ah[["AH50367"]]
+```
+
+```{r}
+genes <- annotation[annotation$type=="gene"]
+suppressWarnings({
+  overlaps <- findOverlaps(peaks, genes, type = "within")
+})
+peaksInGenes <- peaks[queryHits(overlaps),]
+head(peaksInGenes)
+```
+
+```{r}
+myPeak <- "2L:35631-35837"
+plotSignalTracks(files = "D:/ETH/FS2024/Epigen/data/week3/ENCFF127RRR.bam", region=myPeak,
+                 extend=1000)
+```
+
