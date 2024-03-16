@@ -60,7 +60,7 @@ In this example I'll showcase the binning by generating two tracks (i.e. bigwigs
 
 ```{r}
 dir.create("tracks")
-epiwraps::bam2bw("aligned/ctcf.bam", "tracks/ctcf_full.bw", binWidth=1, extend=100, scaling=TRUE)
+epiwraps::bam2bw("aligned/ctcf.bam", "tracks/ctcf_full.bw", binWidth=1, extend=100, scaling=TRUE) # set "extend" because they are not pair-end
 epiwraps::bam2bw("aligned/ctcf.bam", "tracks/ctcf.bw", binWidth=20, extend=100, scaling=TRUE)
 epiwraps::bam2bw("aligned/input.bam", "tracks/input.bw", binWidth=20, extend=100, scaling=TRUE)
 ```
@@ -124,8 +124,8 @@ To visualize this, we'll compare the original signal with the relative one:
 peakSignals <- signal2Matrix(c(ctcf_raw="tracks/ctcf.bw", ctcf_relative="tracks/ctcf_relative.bw", 
                                input="tracks/input.bw"),
                              regions=peaks, extend=2000, w=20)
-plotEnrichedHeatmaps(peakSignals[,c(1,3)], scale_title="raw") + 
-  plotEnrichedHeatmaps(peakSignals[,2], scale_title="normalized\nto input")
+plotEnrichedHeatmaps(peakSignals[c(1,3)], scale_title="raw") + 
+  plotEnrichedHeatmaps(peakSignals[2], scale_title="normalized\nto input")
 ```
 
 
@@ -172,7 +172,8 @@ hist(annotatedPeaks$distance2nearestTSS, breaks = 100)
 If we want to extract the subset of peaks that are within promoters:
 
 ```{r}
-peaks$overlapsPromoter <- overlapsAny(peaks, proms)
+peaks$overlapsPromoter <- overlapsAny(peaks, proms) # what peaks overlaps with the promoter
 peaksInPromoters <- peaks[peaks$overlapsPromoter]
+head(peaksInPromoters)
 ```
 
