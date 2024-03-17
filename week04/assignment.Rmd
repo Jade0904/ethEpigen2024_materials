@@ -1,0 +1,70 @@
+---
+title: "assignment4"
+author: "Zhihan Zhu"
+date: "`r Sys.Date()`"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+## Download files
+
+```{r, eval=FALSE}
+# transcription factor p300
+download.file("https://www.encodeproject.org/files/ENCFF460EOA/@@download/ENCFF460EOA.bed.gz", "D:/ETH/FS2024/Epigen/data/week4/p300.bed.gz")
+
+# H3K4me3
+download.file("https://www.encodeproject.org/files/ENCFF974BMC/@@download/ENCFF974BMC.bed.gz", "D:/ETH/FS2024/Epigen/data/week4/H3K4me3.bed.gz")
+
+# H3K4me1
+download.file("https://www.encodeproject.org/files/ENCFF426IIV/@@download/ENCFF426IIV.bed.gz", "D:/ETH/FS2024/Epigen/data/week4/H3K4me1.bed.gz")
+
+# H3K27ac
+download.file("https://www.encodeproject.org/files/ENCFF274UIB/@@download/ENCFF274UIB.bed.gz", "D:/ETH/FS2024/Epigen/data/week4/H3K27ac.bed.gz")
+
+# H3K27me3
+download.file("https://www.encodeproject.org/files/ENCFF008XKX/@@download/ENCFF008XKX.bed.gz", "D:/ETH/FS2024/Epigen/data/week4/H3K27me3.bed.gz")
+```
+
+
+```{r}
+# import useful packages
+suppressPackageStartupMessages({
+  library(AnnotationHub)
+  library(rtracklayer)
+  library(epiwraps)
+  library(GenomicRanges)
+})
+```
+
+
+```{r}
+# import peaks
+p300 <- rtracklayer::import("D:/ETH/FS2024/Epigen/data/week4/p300.bed.gz", format="narrowPeak")
+H3K4me3 <- rtracklayer::import("D:/ETH/FS2024/Epigen/data/week4/H3K4me3.bed.gz", format="narrowPeak")
+H3K4me1 <- rtracklayer::import("D:/ETH/FS2024/Epigen/data/week4/H3K4me1.bed.gz", format="narrowPeak")
+H3K27ac <- rtracklayer::import("D:/ETH/FS2024/Epigen/data/week4/H3K27ac.bed.gz", format="narrowPeak")
+H3K27me3 <- rtracklayer::import("D:/ETH/FS2024/Epigen/data/week4/H3K27me3.bed.gz", format="narrowPeak")
+```
+
+```{r}
+# generate coverage tracks
+overlap_H3K4me3 <- findOverlaps(p300, H3K4me3)
+overlap_H3K4me1 <- findOverlaps(p300, H3K4me1)
+overlap_H3K27ac <- findOverlaps(p300, H3K27ac)
+overlap_H3K27me3 <- findOverlaps(p300, H3K27me3)
+
+# calculate proportions
+prop_H3K4me3 <- length(unique(queryHits(overlap_H3K4me3))) / length(p300)
+prop_H3K4me1 <- length(unique(queryHits(overlap_H3K4me1))) / length(p300)
+prop_H3K27ac <- length(unique(queryHits(overlap_H3K27ac))) / length(p300)
+prop_H3K27me3 <- length(unique(queryHits(overlap_H3K27me3))) / length(p300)
+
+cat("H3K4me3: ", prop_H3K4me3, "\n")
+cat("H3K4me1: ", prop_H3K4me1, "\n")
+cat("H3K27ac: ", prop_H3K27ac, "\n")
+cat("H3K27me3: ", prop_H3K27me3, "\n")
+```
+
