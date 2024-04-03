@@ -1,0 +1,65 @@
+---
+title: "assignment5"
+author: "Zhihan Zhu"
+date: "`r Sys.Date()`"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+```{r}
+# import useful packages
+suppressPackageStartupMessages({
+  library(GenomicRanges)
+  library(epiwraps)
+  library(rtracklayer)
+  library(ggplot2)
+})
+```
+
+```{r}
+# import mESC peaks
+H3K27me3_mESC <- rtracklayer::import("D:/epigenomics/data/week4/H3K27me3.bed.gz", format="narrowPeak")
+H3K4me3_mESC <- rtracklayer::import("D:/epigenomics/data/week4/H3K4me3.bed.gz", format="narrowPeak")
+```
+
+```{r}
+# extract bivalent domains
+mESC_bivalent <- findOverlaps(H3K4me3_mESC, H3K27me3_mESC)
+mESC_bivalent <- H3K4me3_mESC[queryHits(mESC_bivalent)]
+### select the H3K4me3 regions that overlap with a K27me3 region
+```
+
+```{r}
+# download adult mouse liver cells
+download.file("https://www.encodeproject.org/files/ENCFF251NKN/@@download/ENCFF251NKN.bed.gz", "D:/epigenomics/data/week5/H3K27me3.bed.gz")
+download.file("https://www.encodeproject.org/files/ENCFF420PUU/@@download/ENCFF420PUU.bed.gz", "D:/epigenomics/data/week5/H3K4me3.bed.gz")
+```
+```{r}
+# import liver peaks
+H3K27me3_liver <- rtracklayer::import("D:/epigenomics/data/week5/H3K27me3.bed.gz", format="narrowPeak")
+H3K4me3_liver <- rtracklayer::import("D:/epigenomics/data/week5/H3K4me3.bed.gz", format="narrowPeak")
+```
+
+```{r}
+# overlaps with H3K27me3 in liver cells
+overlaps_H3K27me3 <- findOverlaps(mESC_bivalent, H3K27me3_liver)
+length(overlaps_H3K27me3)
+```
+
+```{r}
+# overlaps with H3K4me3 in liver cells
+overlaps_H3K4me3 <- findOverlaps(mESC_bivalent, H3K4me3_liver)
+length(overlaps_H3K4me3)
+```
+
+```{r}
+# overlaps with their combination
+liver_bivalent <- findOverlaps(H3K4me3_liver, H3K27me3_liver)
+liver_bivalent <- H3K4me3_liver[queryHits(liver_bivalent)]
+overlaps_combination <- findOverlaps(mESC_bivalent, liver_bivalent)
+length(overlaps_combination)
+```
+
