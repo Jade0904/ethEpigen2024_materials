@@ -1,0 +1,155 @@
+---
+title: "assignment8"
+author: "Zhihan Zhu"
+date: "`r Sys.Date()`"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+```{r}
+suppressPackageStartupMessages({
+  library(AnnotationHub)
+  library(epiwraps)
+  library(motifmatchr)
+  library(MotifDb)
+  library(universalmotif)
+  library(ggplot2)
+  library(SummarizedExperiment) # data structure
+  library(sechm) # for plotting heatmaps from a SummrizedExperiment
+  library(BiocParallel) # for multithreading
+  library(chromVAR) # for motif accessibility estimation
+  library(limma) # for statistical analysis
+})
+
+register(SnowParam(4))
+```
+
+```{r, eval=FALSE}
+# download ATAC-seq peak counts
+download.file("https://ethz-ins.org/content/mouse_mm38_hippocampus.peakCounts.SE.rds", "D:/ETH/FS2024/Epigen/data/week8/mouse_mm38_hippocampus.peakCounts.SE.rds")
+```
+
+```{r}
+# load SummarizedExperiment data
+se <- readRDS("D:/ETH/FS2024/Epigen/data/week8/mouse_mm38_hippocampus.peakCounts.SE.rds")
+se
+```
+
+```{r}
+# add conditions
+colData(se)$condition <- c(rep("CTRL", 6), rep("FSS", 6))
+colData(se)
+```
+
+```{r}
+# add gender
+colData(se)$gender <- c(rep("female", 3), rep("male", 3),
+                        rep("female", 3), rep("male", 3))
+colData(se)
+```
+
+
+```{r}
+genome <- BSgenome.Mmusculus.UCSC.mm10::BSgenome.Mmusculus.UCSC.mm10
+seqlevelsStyle(genome) <- "Ensembl"
+```
+
+
+```{r, warning=FALSE}
+# add GC bias
+se <- chromVAR::addGCBias(se, genome = genome)
+rowData(se)
+```
+
+```{r}
+# get the database of motifs
+motifs <- MotifDb::query(MotifDb, c("HOCOMOCOv10", "Mmusculus"))
+motifs <- do.call(TFBSTools::PWMatrixList, setNames(universalmotif::convert_motifs(motifs, class = "TFBSTools-PWMatrix"), mcols(motifs)$geneSymbol))
+motifs
+```
+
+```{r, warning=FALSE}
+# find which peaks contain which motifs
+moi <- motifmatchr::matchMotifs(motifs, subject = se, genome = genome)
+head(assay(moi))
+```
+
+```{r, warning=FALSE}
+# reproducibility
+set.seed(1234)
+# for each peak, identify similar peaks as background
+bg <- chromVAR::getBackgroundPeaks(object = as.matrix(assays(se)$counts), niterations = 1000, bias = rowData(se)$bias)
+# for each motif, compute per-sample deviations relative to the background
+dev <- chromVAR::computeDeviations(object = as.matrix(assays(se)$counts), annotations = as.matrix(assay(moi)), background_peaks = bg)
+dev
+```
+
+### differential analysis comparing stressed and control
+
+```{r}
+dev$condition <- factor(se$condition)
+dev$condition
+```
+
+```{r}
+mm <- model.matrix(~dev$condition)
+mm
+```
+
+```{r}
+fit <- limma::eBayes(limma::lmFit(object = assays(dev)$z, design = mm))
+res <- as.data.frame(limma::topTable(fit, coef = "dev$conditionFSS", number = Inf))
+head(res)
+```
+
+```{r}
+ggplot(res, aes(logFC, -log10(adj.P.Val), label = ID)) +
+  geom_text()
+```
+```{r}
+metadata(dev)$anno_colors <- list(condition = c(CTRL="lightgrey", FSS="darkred"))
+sechm::sechm(dev, features = head(res$ID), assayName = "z", top_annotation = c("condition", "depth"))
+```
+
+```{r}
+view_motifs(motifs[c("GCR", "ANDR", "PRGR")])
+```
+
+The top most motifs are GCR, ANDR and PRGR. They are most differentially accessible for mouse upon stress than control group.
+
+### Differential analysis comparing female and male
+
+```{r}
+dev$gender <- factor(se$gender)
+dev$gender
+```
+
+```{r}
+mm2 <- model.matrix(~dev$gender)
+mm2
+```
+
+```{r}
+fit2 <- limma::eBayes(limma::lmFit(object = assays(dev)$z, design = mm2))
+res2 <- as.data.frame(limma::topTable(fit2, coef = "dev$gendermale", number = Inf))
+head(res2)
+```
+
+```{r}
+ggplot(res2, aes(logFC, -log10(adj.P.Val), label = ID)) +
+  geom_text()
+```
+
+```{r}
+metadata(dev)$anno_colors <- list(gender = c(female="lightgreen", male="skyblue"))
+sechm::sechm(dev, features = head(res2$ID), assayName = "z", top_annotation = c("gender", "depth"))
+```
+
+```{r}
+view_motifs(motifs[c("TYY1", "TEAD1")])
+```
+
+The top most motifs are TYY1 and TEAD1. They are most differentially accessible for male mouse than female mouse.
