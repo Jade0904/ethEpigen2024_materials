@@ -1,0 +1,79 @@
+---
+title: "assignment10"
+author: "Zhihan Zhu"
+date: "`r Sys.Date()`"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+```{r}
+# import useful packages
+suppressPackageStartupMessages({
+  library(GenomicRanges)
+  library(epiwraps)
+  library(ggplot2)
+  library(rGREAT) # Gene Ontology enrichment among genomic regions
+})
+```
+
+```{r, eval=FALSE}
+# download data
+options(timeout = 6000)
+download.file("https://ethz-ins.org/content/w10.assignment.zip", "D:/ETH/FS2024/Epigen/data/week10/w10.practical.zip")
+unzip("D:/ETH/FS2024/Epigen/data/week10/w10.practical.zip")
+```
+
+```{r}
+# import peaks
+# focus on high-confidence peaks from each factor
+peaks <- c("Creb1.bed", "Creb3.bed", "Creb3L1.bed")
+peaks <- lapply(peaks, rtracklayer::import.bed)
+peaks <- lapply(peaks, FUN = function(x) x[x$score>800])
+regions <- reduce(unlist(GRangesList(peaks)))
+regions
+```
+
+```{r}
+# import tracks
+tracks <- c("Creb1.bw", "Creb3.bw", "Creb3L1.bw")
+ese <- signal2Matrix(tracks, regions, extend=2000)
+```
+
+```{r}
+# clustering
+set.seed(123)
+cl <- clusterSignalMatrices(ese, k=4)
+rowData(ese)$cluster <- cl
+table(cl)
+head(rowData(ese))
+```
+
+```{r}
+# plotting the clusters
+mycolors <- c("1"="red", "2"="blue", "3"="darkgreen", "4"="black")
+plotEnrichedHeatmaps(ese, row_split=rowData(ese)$cluster, mean_color=mycolors, colors=c("white","darkred"))
+```
+
+```{r}
+# enrichment analysis
+split_regions <- split(rowRanges(ese), rowData(ese)$cluster)
+lengths(split_regions)
+res <- great(split_regions[["4"]], gene_sets="GO:BP", tss_source="mm10", 
+             background=regions, cores=2)
+bp <- getEnrichmentTables(res)
+head(bp)
+```
+
+```{r}
+# plot biological processes
+ggplot(head(bp,15), aes(fold_enrichment, reorder(description, p_value_hyper), 
+                        size=observed_region_hits, color=-log10(p_value_hyper))) + 
+  geom_point() + scale_color_viridis_c()
+```
+
+In this exercise, signals from bw files within the regions defined by high-confidence peaks from each factor were read into EnrichmentSE object, and clustered into 4 sets. The signals of Creb1 and Creb3L1 are more significant in cluster 4, and Creb3 in cluster 3.
+
+Cluster 4 was used for enrichment analysis on GO ontology. Biological processes were plotted based on fold enrichment and hypergeometric p-value. According to the plot, "process utilizing autophagic mechanism" and "autophagy" have the lowest p-value, "generation of neurons" and "neurogenesis" have the most observed region hits, and "defense response to Gram-positive bacterium" has the highest fold enrichment.
